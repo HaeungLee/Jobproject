@@ -11,4 +11,5 @@ urlpatterns = [
     path('ml-insights/', views.ml_insights, name='ml_insights'),
     path('train-models/', views.train_ml_models, name='train_ml_models'),
     path('chat/', views.chat, name='chat'),
+    path('clear-chat/', views.clear_chat, name='clear_chat'),
 ]

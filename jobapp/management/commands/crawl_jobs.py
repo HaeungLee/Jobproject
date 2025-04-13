@@ -175,23 +175,23 @@ class Command(BaseCommand):
 
             # 관련 필터 선택 - 선택자 변경 가능성 고려 및 오류 처리 추가
             try:
-                # IT/인터넷 카테고리 선택
+                # AI·개발·데이터 카테고리 선택
                 try:
                     # XPATH 방식으로 시도
                     driver.find_element(By.XPATH, '//*[@id="devSearchForm"]/div[2]/div/div[1]/dl[1]/dd[2]/div[2]/dl[1]/dd/div[1]/ul/li[6]/label/span/span').click()
                 except NoSuchElementException:
                     # 텍스트 검색 방식으로 시도
-                    it_elements = driver.find_elements(By.XPATH, '//span[contains(text(), "IT/인터넷")]')
+                    it_elements = driver.find_elements(By.XPATH, '//span[contains(text(), "AI·개발·데이터")]')
                     if it_elements:
                         it_elements[0].click()
                     else:
-                        raise Exception("IT/인터넷 카테고리를 찾을 수 없습니다.")
+                        raise Exception("AI·개발·데이터 카테고리를 찾을 수 없습니다.")
                 time.sleep(3)
                 
                 # 개발자 선택 시도 - 여러 방식으로 시도
                 dev_selectors = [
                     '#duty_step2_10031_ly > li:nth-child(1) > label > span > span',  # 백엔드 개발자
-                    '#duty_step2_10031_ly > li:nth-child(2) > label > span > span',  # 빅데이터
+                    '#duty_step2_10031_ly > li:nth-child(2) > label > span > span',  # 프론트엔드 개발자
                     '#duty_step2_10031_ly > li:nth-child(3) > label > span',         # 웹개발자
                     '#duty_step2_10031_ly > li:nth-child(14) > label > span > span'  # AI/ML엔지니어
                 ]
@@ -204,16 +204,16 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.WARNING(f"선택자를 찾을 수 없습니다: {selector}"))
                         continue
                 
-                # 검색 버튼 클릭
+                # 선택된 조건 검색하기 버튼 클릭
                 try:
                     driver.find_element(By.CSS_SELECTOR, '#dev-btn-search').click()
                 except NoSuchElementException:
                     # 대체 검색 버튼 찾기
-                    search_buttons = driver.find_elements(By.XPATH, '//button[contains(text(), "검색")]')
+                    search_buttons = driver.find_elements(By.XPATH, '//button[contains(text(), "선택된 조건 검색하기")]')
                     if search_buttons:
                         search_buttons[0].click()
                     else:
-                        raise Exception("검색 버튼을 찾을 수 없습니다.")
+                        raise Exception("선택된 조건 검색하기 버튼을 찾을 수 없습니다.")
                 time.sleep(5)  # 검색 결과 로딩 대기 시간 증가
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'필터 선택 중 오류 발생: {str(e)}'))
@@ -250,19 +250,20 @@ class Command(BaseCommand):
                     # 방법 1: 저장된 기본 URL에 페이지 파라미터 추가
                     try:
                         if base_list_url:
-                            # URL에 이미 페이지 파라미터가 있는지 확인
-                            if '?' in base_list_url:
-                                if 'page=' in base_list_url or 'Page=' in base_list_url or 'pg=' in base_list_url:
-                                    # 기존 페이지 파라미터 교체
-                                    import re
-                                    page_url = re.sub(r'(page=|Page=|pg=)\d+', f'\\1{page}', base_list_url)
+                            # JobKorea 페이지네이션 시스템에 맞게 URL 생성
+                            # 기본 URL에 fragment 파라미터 추가
+                            base_part = base_list_url.split('#')[0] if '#' in base_list_url else base_list_url
+                            
+                            # menucode가 없는 경우 추가
+                            if 'menucode=duty' not in base_part:
+                                if '?' in base_part:
+                                    base_part += '&menucode=duty'
                                 else:
-                                    # 페이지 파라미터 추가
-                                    page_url = f"{base_list_url}&page={page}"
-                            else:
-                                # 새 파라미터로 페이지 추가
-                                page_url = f"{base_list_url}?page={page}"
-                                
+                                    base_part += '?menucode=duty'
+                            
+                            # 페이지 fragment 추가
+                            page_url = f"{base_part}#anchorGICnt_{page}"
+                            
                             self.stdout.write(self.style.SUCCESS(f'URL로 이동 시도: {page_url}'))
                             driver.get(page_url)
                             time.sleep(5)  # 페이지 로딩 대기 시간 증가
@@ -371,41 +372,20 @@ class Command(BaseCommand):
                     try:
                         # tr.devloopArea 구조에 맞는 새로운 파싱 로직
                         if 'devloopArea' in job_item.get('class', []):
-                            # 회사명 추출 - 사용자가 제공한 선택자 및 대체 선택자 시도
+                            # 회사명 추출 - tr.devloopArea 내의 첫번째 a 태그 선택
                             company_name = "알 수 없음"
+
+                            # 첫번째 a 태그를 직접 찾기
+                            first_a_tag = job_item.find('a')
+                            if first_a_tag and first_a_tag.get_text(strip=True):
+                                company_name = first_a_tag.get_text(strip=True)
                             
-                            # 먼저 사용자가 제공한 정확한 선택자 시도 (페이지 전체에서)
-                            company_selector = '#dev-gi-list > div > div.tplList.tplJobList > table > tbody > tr > td.tplCo > a'
-                            company_elems = soup.select(company_selector)
-                            
-                            # 현재 처리 중인 행의 인덱스 찾기
-                            current_index = -1
-                            for i, item in enumerate(job_items):
-                                if item == job_item:
-                                    current_index = i
-                                    break
-                            
-                            # 해당 인덱스에 맞는 회사명 요소 가져오기
-                            if 0 <= current_index < len(company_elems):
-                                company_name = company_elems[current_index].get_text(strip=True)
-                            
-                            # 위 방식으로 못 찾은 경우 대체 선택자 시도
+                            # 첫번째 방법으로 찾지 못한 경우, td.tplCo 내의 a 태그 찾기
                             if company_name == "알 수 없음":
-                                # 대체 방법 1: td.tplCo 직접 찾기
                                 company_td = job_item.find('td', class_='tplCo')
                                 if company_td and company_td.find('a'):
                                     company_name = company_td.find('a').get_text(strip=True)
-                                
-                                # 대체 방법 2: 일반적인 회사명 패턴 찾기
-                                if company_name == "알 수 없음":
-                                    company_td = job_item.find('td', class_=lambda c: c and ('cell_first' in c or 'company' in c or 'corp' in c or 'tplCo' in c))
-                                    if company_td:
-                                        company_a = company_td.find('a')
-                                        if company_a and company_a.get_text(strip=True):
-                                            company_name = company_a.get_text(strip=True)
-                                        elif company_td.get_text(strip=True):
-                                            company_name = company_td.get_text(strip=True)
-                            
+                                                        
                             # 채용 타이틀 (일반적으로 두 번째 td에 있는 a 태그)
                             title_td = job_item.find('td', class_='tplTit')
                             if not title_td:
@@ -600,7 +580,7 @@ class Command(BaseCommand):
                                     pass
                             
                             elif '스킬' in dt_text or '기술' in dt_text or '우대사항' in dt_text:
-                                job_details['skills'] = value_text  # required_skills -> skills로 변경
+                                job_details['skills'] = value_text 
                         
                         # 스킬 요구사항 특별 처리 (일반적으로 별도 섹션에 있음)
                         if not job_details['skills']:
@@ -623,13 +603,13 @@ class Command(BaseCommand):
                                         # 모든 관련 섹션 찾기
                                         for section in detail_soup.select(base_selector):
                                             if contains_text in section.get_text():
-                                                job_details['skills'] = section.get_text(strip=True)  # required_skills -> skills로 변경
+                                                job_details['skills'] = section.get_text(strip=True)  
                                                 break
                                     else:
                                         # 일반 선택자
                                         skill_elem = detail_soup.select_one(selector)
                                         if skill_elem:
-                                            job_details['skills'] = skill_elem.get_text(strip=True)  # required_skills -> skills로 변경
+                                            job_details['skills'] = skill_elem.get_text(strip=True)  
                                             break
                                 except Exception as e:
                                     self.stdout.write(self.style.WARNING(f"스킬 정보 파싱 중 오류: {str(e)}"))
@@ -683,7 +663,7 @@ class Command(BaseCommand):
                                 'description': job_details['description'],
                                 'career_level': job_details['experience'],
                                 'education_level': job_details['education'],
-                                'skills': job_details.get('skills'),  # required_skills -> skills로 변경
+                                'skills': job_details.get('skills'), 
                                 'responsibilities': job_details.get('responsibilities')  # 책임업무 추가
                             }
                         )
@@ -700,7 +680,7 @@ class Command(BaseCommand):
                             'description': job_details['description'],
                             'career_level': job_details['experience'],
                             'education_level': job_details['education'],
-                            'skills': job_details.get('skills'),  # required_skills -> skills로 변경
+                            'skills': job_details.get('skills'),
                             'responsibilities': job_details.get('responsibilities'),  # 책임업무 추가
                             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         }

@@ -621,19 +621,25 @@ def ml_insights(request):
     os.makedirs(model_dir, exist_ok=True)
     
     # 모델 로드 시도 (존재하지 않으면 None 반환)
-    clustering_model = JobClustering.load_model()
-    salary_model = SalaryPredictor.load_model()
-    trend_model = TrendPredictor.load_model()
-    job_classifier = JobFieldClassifier.load_model()
-    
-    # 모델 상태 확인
-    models_ready = {
-        'clustering': clustering_model is not None,
-        'salary': salary_model is not None,
-        'trend': trend_model is not None,
-        'classifier': job_classifier is not None
-    }
-    context['models_ready'] = models_ready
+    try:
+        clustering_model = JobClustering.load_model()
+        salary_model = SalaryPredictor.load_model()
+        trend_model = TrendPredictor.load_model()
+        job_classifier = JobFieldClassifier.load_model()
+        
+        # 모델 상태 확인
+        models_ready = {
+            'clustering': clustering_model is not None,
+            'salary': salary_model is not None,
+            'trend': trend_model is not None,
+            'classifier': job_classifier is not None
+        }
+        context['models_ready'] = models_ready
+    except Exception as e:
+        # 모델 로드 중 오류 발생 시 오류 메시지 표시
+        context['model_load_error'] = f"모델 로드 중 오류 발생: {str(e)}"
+        context['models_ready'] = {'clustering': False, 'salary': False, 'trend': False, 'classifier': False}
+        models_ready = context['models_ready']
     
     # LLM 인사이트 요청 처리
     if request.method == 'POST' and 'generate_insight' in request.POST:
@@ -1018,9 +1024,22 @@ def generate_response_from_ollama(prompt, model="gemma3:1b"):
     """Ollama API를 사용하여 LLM 응답 생성"""
     try:
         print(f"Ollama API 호출 시작 - 모델: {model}")
-        print(f"프롬프트: {prompt[:100]}...")  # 로그에 프롬프트 일부만 출력
+        print(f"프롬프트 길이: {len(prompt)} 자")
         
-        # 요청 데이터 준비
+        # Ollama 서버 연결 확인
+        try:
+            health_check = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if health_check.status_code != 200:
+                return f"Ollama 서버 연결 오류: 상태 코드 {health_check.status_code}"
+        except requests.exceptions.RequestException as e:
+            return f"Ollama 서버 연결 실패: {str(e)}. 서버가 실행 중인지 확인하세요."
+        
+        # 요청 데이터 준비 - 프롬프트 길이 제한
+        MAX_PROMPT_LENGTH = 4000  # 안전한 최대 길이
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            prompt = prompt[:MAX_PROMPT_LENGTH] + "...(잘림)"
+            print(f"프롬프트가 너무 길어 {MAX_PROMPT_LENGTH}자로 제한됨")
+        
         request_data = {
             "model": model,
             "prompt": prompt,
@@ -1032,32 +1051,63 @@ def generate_response_from_ollama(prompt, model="gemma3:1b"):
             }
         }
         
-        # API 요청
+        # API 요청 - 타임아웃 증가 및 헤더 추가
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
         response = requests.post(
             "http://localhost:11434/api/generate",
             json=request_data,
-            timeout=120  # 타임아웃 시간 증가
+            headers=headers,
+            timeout=180  # 3분으로 타임아웃 증가 (긴 응답을 위한 시간 확보)
         )
         
         # 응답 확인
         if response.status_code == 200:
             try:
                 result = response.json()
-                print(f"Ollama API 응답 성공: {result['response'][:100]}...")  # 응답 일부만 출력
-                return result["response"]
-            except Exception as json_error:
+                if "response" in result:
+                    response_text = result["response"]
+                    # 응답 길이 확인
+                    print(f"Ollama API 응답 성공: 길이 {len(response_text)}자")
+                    return response_text
+                else:
+                    print(f"Ollama API 응답에 'response' 필드 없음: {result}")
+                    return "API 응답에 예상된 필드가 없습니다."
+            except json.JSONDecodeError as json_error:
                 print(f"JSON 파싱 오류: {str(json_error)}")
-                print(f"원본 응답: {response.text[:200]}")
-                return f"API 응답을 파싱하는 중 오류가 발생했습니다: {str(json_error)}"
+                print(f"원본 응답 (일부): {response.text[:200] if response.text else '내용 없음'}")
+                return f"API 응답을 JSON으로 파싱할 수 없습니다: {str(json_error)}"
         else:
-            error_msg = f"Ollama API 오류: 상태 코드 {response.status_code}, 응답: {response.text[:200]}"
+            error_msg = f"Ollama API 오류 {response.status_code}"
+            try:
+                error_json = response.json()
+                error_msg += f": {error_json.get('error', '상세 정보 없음')}"
+            except:
+                if response.text:
+                    error_msg += f" - {response.text[:200]}"
+            
             print(error_msg)
-            return f"Error: {response.status_code} - {response.text[:100] if response.text else '응답 없음'}"
+            return f"Error: {error_msg}"
+    
+    except requests.exceptions.Timeout:
+        error_msg = f"Ollama API 타임아웃 (180초 초과)"
+        print(error_msg)
+        return f"Error: API 요청이 타임아웃되었습니다. 서버가 과부하 상태거나 프롬프트가 너무 복잡할 수 있습니다."
+    
+    except requests.exceptions.ConnectionError:
+        error_msg = "Ollama API 연결 오류 - 서버가 실행 중인지 확인하세요"
+        print(error_msg)
+        return f"Error: Ollama 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요."
+    
     except Exception as e:
         error_msg = f"Ollama API 호출 중 예외 발생: {str(e)}"
         print(error_msg)
         import traceback
-        print(traceback.format_exc())
+        traceback_str = traceback.format_exc()
+        print(traceback_str)
         return f"Error: {str(e)}"
 
 def chat(request):
@@ -1108,3 +1158,9 @@ def chat(request):
     # GET 요청 처리
     context = {'chat_history': chat_history}
     return render(request, 'jobapp/chat.html', context)
+
+def clear_chat(request):
+    """채팅 내역을 초기화하는 함수"""
+    if 'chat_history' in request.session:
+        del request.session['chat_history']
+    return redirect('jobapp:chat')

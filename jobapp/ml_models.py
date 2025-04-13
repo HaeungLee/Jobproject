@@ -106,15 +106,23 @@ class JobClustering:
     def load_model(cls):
         """저장된 모델 로드"""
         try:
-            vectorizer = joblib.load(os.path.join(MODEL_DIR, 'tfidf_vectorizer.pkl'))
-            kmeans = joblib.load(os.path.join(MODEL_DIR, 'kmeans_model.pkl'))
+            vectorizer_path = os.path.join(MODEL_DIR, 'tfidf_vectorizer.pkl')
+            kmeans_path = os.path.join(MODEL_DIR, 'kmeans_model.pkl')
+            
+            if not os.path.exists(vectorizer_path) or not os.path.exists(kmeans_path):
+                print(f"클러스터링 모델 파일이 존재하지 않습니다: {vectorizer_path} 또는 {kmeans_path}")
+                return None
+            
+            vectorizer = joblib.load(vectorizer_path)
+            kmeans = joblib.load(kmeans_path)
             
             model = cls(n_clusters=kmeans.n_clusters)
             model.vectorizer = vectorizer
             model.kmeans = kmeans
             
             return model
-        except:
+        except Exception as e:
+            print(f"클러스터링 모델 로드 오류: {str(e)}")
             return None
     
     def analyze_clusters(self, job_descriptions, labels):
@@ -331,48 +339,73 @@ class TrendPredictor:
         Returns:
             pandas.Series: 예측 결과 (날짜 인덱스)
         """
-        # 시계열 데이터 준비
-        _, _, date_seq = self.prepare_data(dates, counts)
-        
-        # 마지막 시퀀스 가져오기
-        last_sequence = date_seq.values[-self.window_size:].reshape(1, self.window_size, 1)
-        
-        # 미래 n일 예측
-        predictions = []
-        curr_sequence = last_sequence.copy()
-        
-        for _ in range(n_days):
-            # 다음 값 예측
-            next_pred = self.model.predict(curr_sequence)[0][0]
-            predictions.append(next_pred)
+        try:
+            # 데이터 유효성 검사 추가
+            if len(dates) < self.window_size or len(counts) < self.window_size:
+                raise ValueError(f"데이터가 부족합니다. 최소 {self.window_size}개 이상 필요 (현재: {len(dates)}개)")
             
-            # 시퀀스 업데이트 (가장 오래된 값 제거, 새로운 예측 추가)
-            curr_sequence = np.append(curr_sequence[:, 1:, :], [[next_pred]], axis=1)
+            # 시계열 데이터 준비
+            _, _, date_seq = self.prepare_data(dates, counts)
+            
+            # 마지막 시퀀스 가져오기
+            if len(date_seq) < self.window_size:
+                raise ValueError(f"처리된 시계열 데이터가 부족합니다. 최소 {self.window_size}개 이상 필요 (현재: {len(date_seq)}개)")
+            
+            last_sequence = date_seq.values[-self.window_size:].reshape(1, self.window_size, 1)
+            
+            # 미래 n일 예측
+            predictions = []
+            curr_sequence = last_sequence.copy()
+            
+            for _ in range(n_days):
+                # 다음 값 예측
+                next_pred = self.model.predict(curr_sequence, verbose=0)[0][0]
+                predictions.append(next_pred)
+                
+                # 시퀀스 업데이트 (가장 오래된 값 제거, 새로운 예측 추가)
+                curr_sequence = np.append(curr_sequence[:, 1:, :], [[next_pred]], axis=1)
+                curr_sequence = curr_sequence.reshape(1, self.window_size, 1)  # 형태 명시적 지정
+            
+            # 예측값 역스케일링
+            predictions = self.scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
+            
+            # 날짜 범위 생성
+            last_date = date_seq.index[-1]
+            future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days)
+            
+            # 예측 결과를 Series로 반환
+            return pd.Series(predictions, index=future_dates)
         
-        # 예측값 역스케일링
-        predictions = self.scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
-        
-        # 날짜 범위 생성
-        last_date = date_seq.index[-1]
-        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days)
-        
-        # 예측 결과를 Series로 반환
-        return pd.Series(predictions, index=future_dates)
+        except Exception as e:
+            print(f"트렌드 예측 오류: {str(e)}")
+            # 오류 발생 시 빈 예측 시리즈 반환 (기본값)
+            last_date = pd.to_datetime(max(dates) if dates else datetime.now())
+            future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days)
+            return pd.Series([0] * n_days, index=future_dates)
     
     @classmethod
     def load_model(cls):
         """저장된 모델 로드"""
         try:
-            model = tf.keras.models.load_model(os.path.join(MODEL_DIR, 'trend_predictor.h5'))
-            scaler = joblib.load(os.path.join(MODEL_DIR, 'trend_scaler.pkl'))
-            window_size = joblib.load(os.path.join(MODEL_DIR, 'trend_window_size.pkl'))
+            model_path = os.path.join(MODEL_DIR, 'trend_predictor.h5')
+            scaler_path = os.path.join(MODEL_DIR, 'trend_scaler.pkl')
+            window_size_path = os.path.join(MODEL_DIR, 'trend_window_size.pkl')
+            
+            if not os.path.exists(model_path) or not os.path.exists(scaler_path) or not os.path.exists(window_size_path):
+                print(f"트렌드 모델 파일이 존재하지 않습니다.")
+                return None
+            
+            model = tf.keras.models.load_model(model_path)
+            scaler = joblib.load(scaler_path)
+            window_size = joblib.load(window_size_path)
             
             predictor = cls(window_size=window_size)
             predictor.model = model
             predictor.scaler = scaler
             
             return predictor
-        except:
+        except Exception as e:
+            print(f"트렌드 모델 로드 오류: {str(e)}")
             return None
 
 class JobFieldClassifier:

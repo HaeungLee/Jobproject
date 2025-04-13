@@ -5,9 +5,9 @@ class JobPosting(models.Model):
     company_name = models.CharField(max_length=255)  # 회사명 (추가)
     job_title = models.CharField(max_length=255)     # 구인광고명
     employment_type = models.CharField(max_length=255, blank=True, null=True)  # 고용형태
-    recruitment_count = models.IntegerField(blank=True, null=True)  # 모집인원 (max_length 제거)
+    recruitment_count = models.IntegerField(blank=True, null=True)  # 모집인원
     location = models.CharField(max_length=255, blank=True, null=True)  # 근무지
-    detail_url = models.URLField(blank=True, null=True)  # 상세 페이지 URL (추가)
+    detail_url = models.URLField(blank=True, null=True)  # 상세 페이지 URL
     created_at = models.DateTimeField(auto_now_add=True)  # 데이터 생성 시각
 
     class Meta:
@@ -27,7 +27,7 @@ class JobDetail(models.Model):
     role = models.CharField(max_length=255, blank=True, null=True)    # 직책 
     description = models.TextField(blank=True, null=True)                 # 상세요강
     responsibilities = models.TextField(blank=True, null=True)            # 주요업무
-    skills = models.CharField(max_length=255, blank=True, null=True)  # 스킬 (Max_length -> max_length)
+    skills = models.CharField(max_length=255, blank=True, null=True)  # 스킬
     career_level = models.CharField(max_length=255, blank=True, null=True)  # 경력
     education_level = models.CharField(max_length=255, blank=True, null=True)  # 학력
 
