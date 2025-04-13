@@ -1,0 +1,254 @@
+{% extends "jobapp/base.html" %}
+{% load static %}
+
+{% block title %}AI 어시스턴트 대화{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-container {
+        height: 70vh;
+        overflow-y: auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .message {
+        margin-bottom: 15px;
+        padding: 10px 15px;
+        border-radius: 10px;
+        max-width: 80%;
+    }
+    
+    .user-message {
+        background-color: #dcf8c6;
+        margin-left: auto;
+        text-align: right;
+    }
+    
+    .bot-message {
+        background-color: #f1f0f0;
+        margin-right: auto;
+    }
+    
+    .message-time {
+        font-size: 0.7rem;
+        color: #888;
+        margin-top: 5px;
+    }
+    
+    .typing-indicator {
+        display: none;
+        padding: 10px 15px;
+        background-color: #f1f0f0;
+        border-radius: 10px;
+        width: fit-content;
+        margin-bottom: 15px;
+    }
+    
+    .typing-indicator span {
+        height: 8px;
+        width: 8px;
+        float: left;
+        margin: 0 1px;
+        background-color: #9E9EA1;
+        display: block;
+        border-radius: 50%;
+        opacity: 0.4;
+    }
+    
+    .typing-indicator span:nth-of-type(1) {
+        animation: 1s blink infinite 0.3333s;
+    }
+    
+    .typing-indicator span:nth-of-type(2) {
+        animation: 1s blink infinite 0.6666s;
+    }
+    
+    .typing-indicator span:nth-of-type(3) {
+        animation: 1s blink infinite 0.9999s;
+    }
+    
+    @keyframes blink {
+        50% {
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="text-center mb-4">AI 채용 어시스턴트</h2>
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-robot mr-2"></i>
+                        <span>모델과 대화하기</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chat-container" id="chatContainer">
+                        <div class="message bot-message">
+                            <div>안녕하세요! 저는 채용 데이터 분석 및 취업 상담을 도와드리는 AI 어시스턴트입니다. 무엇을 도와드릴까요?</div>
+                            <div class="message-time">{% now "H:i" %}</div>
+                        </div>
+                        
+                        {% for message in chat_history %}
+                            <div class="message {% if message.is_user %}user-message{% else %}bot-message{% endif %}">
+                                <div>{{ message.content|linebreaksbr }}</div>
+                                <div class="message-time">{{ message.timestamp|time:"H:i" }}</div>
+                            </div>
+                        {% endfor %}
+                        
+                        <div class="typing-indicator" id="typingIndicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                    
+                    <form method="post" id="chatForm">
+                        {% csrf_token %}
+                        <div class="input-group">
+                            <input type="text" name="message" id="messageInput" class="form-control" placeholder="메시지를 입력하세요..." required>
+                            <div class="input-group-append">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-header">AI 어시스턴트 기능</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>질문 예시:</h5>
+                            <ul>
+                                <li>웹 개발자로 취업하려면 어떤 기술을 배워야 할까요?</li>
+                                <li>AI/ML 엔지니어 직무의 전망은 어떤가요?</li>
+                                <li>개발자 면접 준비를 어떻게 해야 할까요?</li>
+                                <li>프론트엔드와 백엔드 개발자 중 어떤 것이 더 적합할까요?</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>기술 스택 상담:</h5>
+                            <ul>
+                                <li>특정 기술 스택에 대한 취업 전망 문의</li>
+                                <li>기술 스택 추천 요청</li>
+                                <li>최근 채용 트렌드 분석 요청</li>
+                                <li>특정 직무에 필요한 자격증/경력 문의</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chatContainer = document.getElementById('chatContainer');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const typingIndicator = document.getElementById('typingIndicator');
+    
+    // 채팅창을 항상 최신 메시지로 스크롤
+    function scrollToBottom() {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+    
+    // 페이지 로드 시 스크롤
+    scrollToBottom();
+    
+    // 메시지 전송 처리
+    chatForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const message = messageInput.value.trim();
+        if (!message) return;
+        
+        // 현재 시간 포맷팅
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const timeString = `${hours}:${minutes}`;
+        
+        // 사용자 메시지 추가
+        const userMessageHTML = `
+            <div class="message user-message">
+                <div>${message}</div>
+                <div class="message-time">${timeString}</div>
+            </div>
+        `;
+        chatContainer.insertAdjacentHTML('beforeend', userMessageHTML);
+        
+        // 입력창 초기화
+        messageInput.value = '';
+        
+        // 스크롤 조정
+        scrollToBottom();
+        
+        // 타이핑 표시기 보이기
+        typingIndicator.style.display = 'block';
+        scrollToBottom();
+        
+        // 서버로 메시지 전송
+        fetch('{% url "jobapp:chat" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: new URLSearchParams({
+                'message': message
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // 타이핑 표시기 숨기기
+            typingIndicator.style.display = 'none';
+            
+            // 봇 응답 추가
+            const botMessageHTML = `
+                <div class="message bot-message">
+                    <div>${data.response.replace(/\n/g, '<br>')}</div>
+                    <div class="message-time">${timeString}</div>
+                </div>
+            `;
+            chatContainer.insertAdjacentHTML('beforeend', botMessageHTML);
+            
+            // 스크롤 조정
+            scrollToBottom();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // 타이핑 표시기 숨기기
+            typingIndicator.style.display = 'none';
+            
+            // 오류 메시지 추가
+            const errorMessageHTML = `
+                <div class="message bot-message">
+                    <div>죄송합니다, 응답을 처리하는 중 오류가 발생했습니다. 다시 시도해주세요.</div>
+                    <div class="message-time">${timeString}</div>
+                </div>
+            `;
+            chatContainer.insertAdjacentHTML('beforeend', errorMessageHTML);
+            
+            // 스크롤 조정
+            scrollToBottom();
+        });
+    });
+});
+</script>
+{% endblock %}

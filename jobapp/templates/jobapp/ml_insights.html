@@ -1,0 +1,465 @@
+{% extends "jobapp/base.html" %}
+{% load static %}
+
+{% block title %}머신러닝 기반 채용 인사이트 - 분석{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ai-insight-content {
+        white-space: pre-line;
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 3px solid #007bff;
+    }
+    
+    /* 아코디언 스타일 수동 정의 */
+    .accordion-item {
+        border: 1px solid rgba(0,0,0,.125);
+        margin-bottom: 5px;
+        border-radius: 4px;
+    }
+    .accordion-header {
+        margin: 0;
+    }
+    .accordion-button {
+        position: relative;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+        color: #212529;
+        text-align: left;
+        background-color: #fff;
+        border: 0;
+        border-radius: 0;
+        overflow-anchor: none;
+        cursor: pointer;
+    }
+    .accordion-button:not(.collapsed) {
+        color: #0c63e4;
+        background-color: #e7f1ff;
+    }
+    .accordion-button.collapsed {
+        border-bottom-width: 0;
+    }
+    .accordion-collapse {
+        display: none;
+    }
+    .accordion-collapse.show {
+        display: block;
+    }
+    .accordion-body {
+        padding: 1rem 1.25rem;
+    }
+    
+    /* 디버깅 패널 숨기기 */
+    .debug-info {
+        display: none !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="insights-header text-center">
+    <h1>머신러닝 기반 채용 인사이트</h1>
+    <p class="lead">AI 및 개발 직무 채용 시장 딥러닝 분석</p>
+    <div class="text-center mb-3">
+        <a href="{% url 'jobapp:job_insights' %}" class="btn btn-outline-primary">기본 인사이트</a>
+        <a href="{% url 'jobapp:ml_insights' %}" class="btn btn-primary">ML/DL 인사이트</a>
+        <a href="{% url 'jobapp:train_ml_models' %}" class="btn btn-outline-success">모델 학습</a>
+    </div>
+</header>
+
+<!-- 모델 상태 확인 영역 -->
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>머신러닝 모델 상태</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 {% if models_ready.clustering %}border-success{% else %}border-danger{% endif %}">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">클러스터링 모델</h5>
+                                    {% if models_ready.clustering %}
+                                    <span class="badge bg-success text-white">준비됨</span>
+                                    {% else %}
+                                    <span class="badge bg-danger text-white">미준비</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 {% if models_ready.salary %}border-success{% else %}border-danger{% endif %}">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">급여 예측 모델</h5>
+                                    {% if models_ready.salary %}
+                                    <span class="badge bg-success text-white">준비됨</span>
+                                    {% else %}
+                                    <span class="badge bg-danger text-white">미준비</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 {% if models_ready.trend %}border-success{% else %}border-danger{% endif %}">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">트렌드 예측 모델</h5>
+                                    {% if models_ready.trend %}
+                                    <span class="badge bg-success text-white">준비됨</span>
+                                    {% else %}
+                                    <span class="badge bg-danger text-white">미준비</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 {% if models_ready.classifier %}border-success{% else %}border-danger{% endif %}">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">직무 분류 모델</h5>
+                                    {% if models_ready.classifier %}
+                                    <span class="badge bg-success text-white">준비됨</span>
+                                    {% else %}
+                                    <span class="badge bg-danger text-white">미준비</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% if not models_ready.clustering or not models_ready.salary or not models_ready.trend or not models_ready.classifier %}
+                    <div class="text-center mt-3">
+                        <a href="{% url 'jobapp:train_ml_models' %}" class="btn btn-primary">모델 학습 시작</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 트렌드 예측 섹션 -->
+    {% if models_ready.trend %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>향후 30일간 채용 트렌드 예측 (LSTM 딥러닝)</h5>
+                </div>
+                <div class="card-body">
+                    {% if trend_error %}
+                    <div class="alert alert-danger">{{ trend_error }}</div>
+                    {% elif trend_prediction_graph %}
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="text-center mb-3">
+                                <img src="data:image/png;base64,{{ trend_prediction_graph }}" class="img-fluid" alt="채용 트렌드 예측">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">트렌드 예측 주요 지표</div>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item">
+                                        <strong>평균 예상 채용 공고 수:</strong> {{ trend_summary.avg_jobs }} 개
+                                    </li>
+                                    <li class="list-group-item">
+                                        <strong>최대 예상 채용 공고 수:</strong> {{ trend_summary.max_jobs }} 개
+                                    </li>
+                                    <li class="list-group-item">
+                                        <strong>최대 채용 예상일:</strong> {{ trend_summary.max_date }}
+                                    </li>
+                                    <li class="list-group-item">
+                                        <strong>분석 방법:</strong> LSTM(Long Short-Term Memory) 딥러닝 시계열 예측
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AI 인사이트 요청 버튼 추가 -->
+                    {% if llm_available %}
+                    <div class="mt-4">
+                        <h6>AI 기반 심층 분석</h6>
+                        {% if llm_trend_insight %}
+                        <div class="alert alert-info">
+                            <div class="mb-2">
+                                <strong><i class="fas fa-robot"></i> AI 분석 결과:</strong>
+                            </div>
+                            <div class="ai-insight-content">
+                                {{ llm_trend_insight }}
+                            </div>
+                        </div>
+                        {% else %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="insight_type" value="trend">
+                            <button type="submit" name="generate_insight" class="btn btn-outline-primary">
+                                <i class="fas fa-robot mr-1"></i> AI로 트렌드 분석 받기
+                            </button>
+                            <small class="form-text text-muted">Gemma 모델을 사용해 트렌드 데이터에 대한 심층 분석을 생성합니다.</small>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    {% else %}
+                    <div class="alert alert-warning">트렌드 예측 데이터가 없습니다.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 클러스터링 결과 섹션 -->
+    {% if models_ready.clustering %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>채용 공고 자동 클러스터링 (K-means)</h5>
+                </div>
+                <div class="card-body">
+                    {% if cluster_error %}
+                    <div class="alert alert-danger">{{ cluster_error }}</div>
+                    {% elif cluster_analysis %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            {% if cluster_graph %}
+                            <div class="text-center mb-3">
+                                <img src="data:image/png;base64,{{ cluster_graph }}" class="img-fluid" alt="클러스터 분포">
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <h6>클러스터별 주요 키워드 및 분석</h6>
+                            <!-- 수동 아코디언 구현 -->
+                            <div class="custom-accordion" id="clusterAccordion">
+                                {% for cluster_name, cluster_info in cluster_analysis.items %}
+                                <div class="accordion-item mb-2">
+                                    <div class="accordion-header" id="heading{{ forloop.counter }}">
+                                        <button class="accordion-button collapsed" 
+                                                onclick="toggleAccordion('collapse{{ forloop.counter }}')"
+                                                aria-expanded="false" 
+                                                aria-controls="collapse{{ forloop.counter }}">
+                                            {{ cluster_name }} ({{ cluster_info.job_count }}개 직무)
+                                        </button>
+                                    </div>
+                                    <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse" 
+                                         aria-labelledby="heading{{ forloop.counter }}">
+                                        <div class="accordion-body">
+                                            <strong>주요 키워드:</strong>
+                                            <div class="mb-2">
+                                                {% for keyword in cluster_info.top_keywords %}
+                                                <span class="badge badge-primary mr-1 p-2" style="background-color: #007bff; margin-right: 5px;">{{ keyword }}</span>
+                                                {% endfor %}
+                                            </div>
+                                            <strong>해석:</strong> 
+                                            <p>이 클러스터에 속한 직무들은 
+                                            {% if 'python' in cluster_info.top_keywords or 'django' in cluster_info.top_keywords or 'flask' in cluster_info.top_keywords %}
+                                                파이썬 백엔드 개발 직무로 보입니다.
+                                            {% elif 'java' in cluster_info.top_keywords or 'spring' in cluster_info.top_keywords %}
+                                                자바 백엔드 개발 직무로 보입니다.
+                                            {% elif 'react' in cluster_info.top_keywords or 'vue' in cluster_info.top_keywords or 'javascript' in cluster_info.top_keywords %}
+                                                프론트엔드 개발 직무로 보입니다.
+                                            {% elif 'android' in cluster_info.top_keywords or 'ios' in cluster_info.top_keywords or 'mobile' in cluster_info.top_keywords %}
+                                                모바일 앱 개발 직무로 보입니다.
+                                            {% elif 'ai' in cluster_info.top_keywords or 'ml' in cluster_info.top_keywords or 'tensorflow' in cluster_info.top_keywords or '분석' in cluster_info.top_keywords %}
+                                                AI/ML 관련 직무로 보입니다.
+                                            {% else %}
+                                                유사한 기술 스택을 요구하는 직무들로 보입니다.
+                                            {% endif %}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AI 클러스터 인사이트 요청 버튼 추가 -->
+                    {% if llm_available %}
+                    <div class="mt-4">
+                        <h6>AI 기반 클러스터 심층 분석</h6>
+                        {% if llm_cluster_insight %}
+                        <div class="alert alert-info">
+                            <div class="mb-2">
+                                <strong><i class="fas fa-robot"></i> AI 클러스터 분석 결과:</strong>
+                            </div>
+                            <div class="ai-insight-content">
+                                {{ llm_cluster_insight }}
+                            </div>
+                        </div>
+                        {% else %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="insight_type" value="cluster">
+                            <button type="submit" name="generate_insight" class="btn btn-outline-primary">
+                                <i class="fas fa-robot mr-1"></i> AI로 클러스터 분석 받기
+                            </button>
+                            <small class="form-text text-muted">Gemma 모델을 사용해 직무 클러스터에 대한 심층 분석 및 해석을 생성합니다.</small>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="alert alert-warning">클러스터링 분석 데이터가 없습니다.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 급여 예측 섹션 -->
+    {% if models_ready.salary %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>급여 예측 모델 분석 (Random Forest)</h5>
+                </div>
+                <div class="card-body">
+                    {% if salary_error %}
+                    <div class="alert alert-danger">{{ salary_error }}</div>
+                    {% elif salary_predictions %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>직무별 예상 급여:</h6>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>직무명</th>
+                                        <th>경력</th>
+                                        <th>학력</th>
+                                        <th>예상 급여</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for pred in salary_predictions %}
+                                    <tr>
+                                        <td>{{ pred.title }}</td>
+                                        <td>{{ pred.career }}</td>
+                                        <td>{{ pred.education }}</td>
+                                        <td>{{ pred.predicted_salary }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            <div class="alert alert-info">
+                                <strong>참고:</strong> 이 급여 예측은 현재 데이터베이스의 채용 공고 정보를 기반으로 한 추정치이며, 
+                                실제 급여는 회사의 규모, 지역, 개인의 역량 등 다양한 요소에 따라 달라질 수 있습니다.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>급여 예측에 중요한 요소:</h6>
+                            <ul class="list-group">
+                                {% for feature in salary_features %}
+                                <li class="list-group-item">{{ feature }}</li>
+                                {% endfor %}
+                            </ul>
+                            <div class="mt-3">
+                                <strong>분석 방법:</strong> Random Forest 회귀 분석을 통해 여러 특성(경력, 학력, 지역, 스킬 등)을 기반으로 급여를 예측합니다.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AI 급여 인사이트 요청 버튼 추가 -->
+                    {% if llm_available %}
+                    <div class="mt-4">
+                        <h6>AI 기반 급여 심층 분석</h6>
+                        {% if llm_salary_insight %}
+                        <div class="alert alert-info">
+                            <div class="mb-2">
+                                <strong><i class="fas fa-robot"></i> AI 급여 분석 결과:</strong>
+                            </div>
+                            <div class="ai-insight-content">
+                                {{ llm_salary_insight }}
+                            </div>
+                        </div>
+                        {% else %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="insight_type" value="salary">
+                            <button type="submit" name="generate_insight" class="btn btn-outline-primary">
+                                <i class="fas fa-robot mr-1"></i> AI로 급여 분석 받기
+                            </button>
+                            <small class="form-text text-muted">Gemma 모델을 사용해 급여 예측 결과에 대한 심층 분석 및 조언을 생성합니다.</small>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="alert alert-warning">급여 예측 데이터가 없습니다.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div> <!-- 컨테이너 닫기 -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 아코디언 토글 함수 구현
+function toggleAccordion(id) {
+    const content = document.getElementById(id);
+    if (content) {
+        // 열려있는 다른 아코디언 닫기
+        const allPanels = document.querySelectorAll('.accordion-collapse.show');
+        allPanels.forEach(panel => {
+            if (panel.id !== id) {
+                panel.classList.remove('show');
+                
+                // 버튼 상태 변경
+                const button = document.querySelector(`[aria-controls="${panel.id}"]`);
+                if (button) {
+                    button.classList.add('collapsed');
+                    button.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+        
+        // 현재 아코디언 토글
+        content.classList.toggle('show');
+        
+        // 버튼 상태 토글
+        const button = document.querySelector(`[aria-controls="${id}"]`);
+        if (button) {
+            if (content.classList.contains('show')) {
+                button.classList.remove('collapsed');
+                button.setAttribute('aria-expanded', 'true');
+            } else {
+                button.classList.add('collapsed');
+                button.setAttribute('aria-expanded', 'false');
+            }
+        }
+    }
+}
+
+// 페이지 로드 시 섹션 체크
+document.addEventListener('DOMContentLoaded', function() {
+    // 컨테이너 확인
+    const container = document.querySelector('.container');
+    if (container) {
+        console.log('컨테이너 찾음');
+    } else {
+        console.log('컨테이너 찾지 못함');
+    }
+    
+    // 카드 섹션 확인
+    const cards = document.querySelectorAll('.card');
+    console.log(`${cards.length}개의 카드 섹션 발견됨`);
+    
+    // 아코디언 확인
+    const accordionItems = document.querySelectorAll('.accordion-item');
+    console.log(`${accordionItems.length}개의 아코디언 항목 발견됨`);
+});
+</script>
+{% endblock %}

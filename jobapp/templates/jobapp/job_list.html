@@ -1,0 +1,78 @@
+{% extends "jobapp/base.html" %}
+{% load static %}
+
+{% block title %}채용 공고 목록 - 채용정보 분석 앱{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">채용 공고 목록</h1>
+    
+    <!-- 필터링 섹션 -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">검색 필터</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" action="{% url 'jobapp:job_list' %}">
+                <div class="row">
+                    <div class="col-md-5 mb-3">
+                        <label for="location">지역</label>
+                        <select class="form-control" id="location" name="location">
+                            <option value="">모든 지역</option>
+                            {% for location in locations %}
+                                {% if location %}
+                                    <option value="{{ location }}" {% if request.GET.location == location %}selected{% endif %}>{{ location }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5 mb-3">
+                        <label for="employment_type">고용형태</label>
+                        <select class="form-control" id="employment_type" name="employment_type">
+                            <option value="">모든 고용형태</option>
+                            {% for type in employment_types %}
+                                {% if type %}
+                                    <option value="{{ type }}" {% if request.GET.employment_type == type %}selected{% endif %}>{{ type }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">검색</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 채용 공고 목록 -->
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">채용 공고 ({{ jobs|length }}개)</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if jobs %}
+                <div class="list-group list-group-flush">
+                    {% for job in jobs %}
+                        <a href="{% url 'jobapp:job_detail' job.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ job.job_title }}</h5>
+                                <small>{{ job.created_at|date:"Y-m-d" }}</small>
+                            </div>
+                            <div class="d-flex w-100 justify-content-between">
+                                <p class="mb-1">{{ job.company_name }}</p>
+                                <span class="badge badge-primary">{{ job.employment_type|default:"정규직" }}</span>
+                            </div>
+                            <small>{{ job.location|default:"위치 미지정" }}</small>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info m-3">
+                    현재 등록된 채용 공고가 없습니다.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

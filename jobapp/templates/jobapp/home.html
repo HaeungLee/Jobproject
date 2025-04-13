@@ -1,0 +1,51 @@
+{% extends "jobapp/base.html" %}
+{% load static %}
+
+{% block title %}홈 - 채용정보 분석 앱{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="jumbotron bg-light">
+        <h1 class="display-4">채용정보 분석 앱</h1>
+        <p class="lead">잡코리아에서 크롤링한 개발자 채용 정보를 분석하고 인사이트를 제공합니다.</p>
+        <hr class="my-4">
+        <p>현재 총 <strong>{{ total_jobs }}</strong>개의 채용 공고가 등록되어 있으며, <strong>{{ backup_count }}</strong>개의 백업 데이터가 저장되어 있습니다.</p>
+        <div class="mt-4">
+            <a class="btn btn-primary btn-lg mr-2" href="{% url 'jobapp:job_list' %}" role="button">
+                <i class="fas fa-list mr-2"></i>채용 목록 보기
+            </a>
+            <a class="btn btn-success btn-lg" href="{% url 'jobapp:job_insights' %}" role="button">
+                <i class="fas fa-chart-bar mr-2"></i>인사이트 보기
+            </a>
+        </div>
+    </div>
+
+    {% if recent_jobs %}
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">최근 등록된 채용 공고</h4>
+        </div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush">
+                {% for job in recent_jobs %}
+                <a href="{% url 'jobapp:job_detail' job.id %}" class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ job.job_title }}</h5>
+                        <small>{{ job.created_at|date:"Y-m-d" }}</small>
+                    </div>
+                    <div class="d-flex w-100 justify-content-between">
+                        <p class="mb-1">{{ job.company_name }}</p>
+                        <span class="badge badge-primary">{{ job.employment_type|default:"정규직" }}</span>
+                    </div>
+                    <small>{{ job.location|default:"위치 미지정" }}</small>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card-footer text-center">
+            <a href="{% url 'jobapp:job_list' %}" class="btn btn-outline-primary">더 많은 채용 공고 보기</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
