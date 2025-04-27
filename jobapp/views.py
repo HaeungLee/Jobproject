@@ -227,12 +227,18 @@ def job_insights(request):
     if data_source == 'file' and file_path:
         # 백업 파일에서 데이터 로드
         job_data = load_data_from_file(file_path)
-        context = generate_matplotlib_graphs_from_db(job_data)
+        
+        # 차트 데이터 생성 및 컨텍스트에 추가
+        chart_data = generate_chart_data_from_dataframe(job_data)
+        context = chart_data  # 차트 JSON 데이터 설정
         context['data_source'] = '백업 파일'
         context['file_name'] = os.path.basename(file_path)
         
-        # 데이터 기반 인사이트 요약 생성
-        context.update(generate_matplotlib_graphs_from_db(job_data))
+        # Matplotlib/Seaborn 그래프 이미지 생성 및 추가
+        context.update(generate_matplotlib_graphs_from_dataframe(job_data))
+        
+        # 총 채용 공고 수 추가
+        context['total_jobs'] = len(job_data)
     else:
         # DB에서 데이터 로드 (기존 코드 사용)
         # 전체 채용 수
@@ -611,6 +617,97 @@ def generate_matplotlib_graphs_from_dataframe(df):
         plt.close(fig)
     
     return graph_data
+
+def generate_chart_data_from_dataframe(df):
+    """백업 파일 DataFrame으로부터 Chart.js 데이터 생성"""
+    
+    chart_data = {}
+    # 직무 분야별 채용 분포
+    job_field_data = {}
+    if 'job_field' in df.columns:
+        field_counter = Counter()
+        for field in df['job_field'].dropna():
+            fields = re.split(r'[,/]', str(field))
+            for f in fields:
+                f = f.strip()
+                if f and len(f) < 30:
+                    field_counter[f] += 1
+        
+        top_fields = field_counter.most_common(10)
+        job_field_data = {
+            'labels': [field[0] for field in top_fields],
+            'data': [field[1] for field in top_fields]
+        }
+    chart_data['job_field_data_json'] = json.dumps(job_field_data)
+    
+    # 지역별 채용 현황
+    location_data = {}
+    if 'location' in df.columns:
+        location_counter = Counter(df['location'].dropna())
+        top_locations = location_counter.most_common(10)
+        location_data = {
+            'labels': [loc[0] for loc in top_locations],
+            'data': [loc[1] for loc in top_locations]
+        }
+    chart_data['location_data_json'] = json.dumps(location_data)
+    
+    # 경력 수준별 분포
+    career_data = {}
+    if 'career_level' in df.columns:
+        career_counter = Counter(df['career_level'].dropna())
+        top_careers = career_counter.most_common(10)
+        career_data = {
+            'labels': [career[0] for career in top_careers],
+            'data': [career[1] for career in top_careers]
+        }
+    chart_data['career_data_json'] = json.dumps(career_data)
+    
+    # 학력 요구사항 분포
+    education_data = {}
+    if 'education_level' in df.columns:
+        education_counter = Counter(df['education_level'].dropna())
+        top_education = education_counter.most_common(10)
+        education_data = {
+            'labels': [edu[0] for edu in top_education],
+            'data': [edu[1] for edu in top_education]
+        }
+    chart_data['education_data_json'] = json.dumps(education_data)
+    
+    # 개발 분야별 채용 비교
+    dev_field_comparison = {'labels': ['AI/빅데이터', '웹 개발', '앱 개발'], 'data': [0, 0, 0]}
+    if 'job_field' in df.columns:
+        ai_jobs = df['job_field'].str.contains('AI|인공지능|머신러닝|딥러닝|빅데이터', case=False, na=False).sum()
+        web_jobs = df['job_field'].str.contains('웹|프론트엔드|백엔드|풀스택', case=False, na=False).sum()
+        app_jobs = df['job_field'].str.contains('모바일|앱|안드로이드|iOS', case=False, na=False).sum()
+        dev_field_comparison['data'] = [ai_jobs, web_jobs, app_jobs]
+    chart_data['dev_field_comparison_json'] = json.dumps(dev_field_comparison)
+    
+    # 기술 스택 분석
+    skill_data = {'labels': [], 'data': []}
+    if 'skills' in df.columns:
+        skill_counter = Counter()
+        for skills_str in df['skills'].dropna():
+            skills = re.split(r'[,\s]', str(skills_str))
+            for skill in skills:
+                skill = skill.strip().lower()
+                if len(skill) > 1 and len(skill) < 15:
+                    skill_counter[skill] += 1
+        
+        top_skills = skill_counter.most_common(15)
+        skill_data = {
+            'labels': [skill[0] for skill in top_skills],
+            'data': [skill[1] for skill in top_skills]
+        }
+    chart_data['skill_data_json'] = json.dumps(skill_data)
+    
+    # 백업 파일에서 생성된 인사이트 (간단한 예시)
+    chart_data['trend_insight'] = "백업 파일 데이터로부터 트렌드 인사이트를 생성하였습니다."
+    chart_data['location_insight'] = "백업 파일 데이터로부터 위치 인사이트를 생성하였습니다."
+    chart_data['career_insight'] = "백업 파일 데이터로부터 경력 인사이트를 생성하였습니다."
+    chart_data['education_insight'] = "백업 파일 데이터로부터 교육 인사이트를 생성하였습니다."
+    chart_data['skill_insight'] = "백업 파일 데이터로부터 스킬 인사이트를 생성하였습니다."
+    
+    return chart_data
 
 def ml_insights(request):
     """머신러닝/딥러닝 기반 인사이트 페이지"""
@@ -1164,3 +1261,4 @@ def clear_chat(request):
     if 'chat_history' in request.session:
         del request.session['chat_history']
     return redirect('jobapp:chat')
+```
