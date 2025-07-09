@@ -1261,4 +1261,3 @@ def clear_chat(request):
     if 'chat_history' in request.session:
         del request.session['chat_history']
     return redirect('jobapp:chat')
-```

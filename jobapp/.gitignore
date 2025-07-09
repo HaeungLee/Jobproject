@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+__pycache__/*
+
+# Django migrations cache
+migrations/__pycache__/
+
+# Test outputs
+htmlcov/
+.coverage
+
+# Editor/IDE
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# Backup
+*~
+*.bak
+
+# Ignore local settings
+local_settings.py

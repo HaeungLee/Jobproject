@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Django settings cache
+*.pyc
+*.pyo
+
+# Editor/IDE
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# Backup
+*~
+*.bak
+
+# Ignore local settings
+local_settings.py
